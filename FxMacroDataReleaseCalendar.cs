@@ -21,6 +21,7 @@ using Newtonsoft.Json;
 using NodaTime;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
+using QuantConnect.Data.UniverseSelection;
 
 namespace QuantConnect.DataSource
 {
@@ -48,12 +49,13 @@ namespace QuantConnect.DataSource
         {
             var currency = config.Symbol.Value.ToLowerInvariant();
             var source = $"https://api.fxmacrodata.com/v1/calendar/{currency}?limit=100";
+            var headers = new List<KeyValuePair<string, string>>();
             var apiKey = Config.Get("fxmacrodata-api-key");
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
-                source += $"&api_key={Uri.EscapeDataString(apiKey)}";
+                headers.Add(new KeyValuePair<string, string>("X-API-Key", apiKey));
             }
-            return new SubscriptionDataSource(source, SubscriptionTransportMedium.RemoteFile, FileFormat.UnfoldingCollection);
+            return new SubscriptionDataSource(source, SubscriptionTransportMedium.RemoteFile, FileFormat.UnfoldingCollection, headers);
         }
 
         public override BaseData Reader(SubscriptionDataConfig config, string line, DateTime date, bool isLiveMode)
