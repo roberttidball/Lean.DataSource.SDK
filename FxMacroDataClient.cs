@@ -33,10 +33,16 @@ namespace QuantConnect.DataSource
 
         public FxMacroDataClient(HttpClient httpClient = null, string baseUrl = DefaultBaseUrl, string apiKey = null)
         {
-            _httpClient = httpClient ?? new HttpClient();
+            // Redirects are not followed so the API key header is never replayed to another host.
+            _httpClient = httpClient ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
             _ownsClient = httpClient == null;
             _baseUrl = baseUrl.EndsWith("/") ? baseUrl.Substring(0, baseUrl.Length - 1) : baseUrl;
-            _apiKey = string.IsNullOrWhiteSpace(apiKey) ? Config.Get("fxmacrodata-api-key") : apiKey;
+            _apiKey = (string.IsNullOrWhiteSpace(apiKey) ? Config.Get("fxmacrodata-api-key") : apiKey)?.Trim();
+            if (!string.IsNullOrEmpty(_apiKey) && _apiKey.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
+            {
+                throw new ArgumentException("The FXMacroData API key must not contain whitespace or control characters.",
+                    nameof(apiKey));
+            }
         }
 
         public Task<string> GetDataCatalogueAsync(string currency = "usd", bool includeCapabilities = false,
@@ -287,6 +293,12 @@ namespace QuantConnect.DataSource
                 request.Headers.Add("X-API-Key", _apiKey);
             }
             using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+            var statusCode = (int)response.StatusCode;
+            if (statusCode >= 300 && statusCode < 400)
+            {
+                throw new HttpRequestException(
+                    $"FXMacroData returned an unexpected redirect ({statusCode}); redirects are not followed.");
+            }
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         }
